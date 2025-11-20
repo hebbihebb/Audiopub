@@ -1,0 +1,7 @@
+nicegui>=3.3.0
+ebooklib>=0.18
+beautifulsoup4>=4.12.0
+onnxruntime>=1.23.0
+soundfile>=0.13.0
+pydub>=0.25.1
+numpy>=2.0.0

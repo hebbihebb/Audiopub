@@ -23,8 +23,9 @@ A local desktop application to convert EPUB ebooks into .m4b audiobooks using Su
 1. Clone the repository.
 2. Install Python dependencies:
    ```bash
-   pip install nicegui ebooklib beautifulsoup4 onnxruntime soundfile pydub numpy
+   pip install -r requirements.txt
    ```
+
 
 ## Model Setup (Git LFS)
 

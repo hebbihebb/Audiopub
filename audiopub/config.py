@@ -13,16 +13,16 @@ os.makedirs(ASSETS_DIR, exist_ok=True)
 os.makedirs(OUTPUT_DIR, exist_ok=True)
 
 # TTS Settings
-DEFAULT_SPEED = 1.0
+DEFAULT_SPEED = 1.05 # Recommended default
 DEFAULT_STEPS = 20 # Higher for better quality
 
 # Text Processing
-MIN_CHUNK_SIZE = 1    # Minimum characters per chunk (1 forces split check immediately)
-MAX_CHUNK_SIZE = 50   # Maximum characters per chunk (low value forces split after each sentence)
+MIN_CHUNK_SIZE = 1    # Minimum characters per chunk
+MAX_CHUNK_SIZE = 300  # Recommended max chunk size for natural pauses
 
 # Audio Settings
 CROSSFADE_MS = 50
-SILENCE_PADDING_MS = 150
+SILENCE_PADDING_MS = 300 # Recommended silence between chunks
 SAMPLE_RATE = 24000 # Supertonic default
 
 # FFMPEG Path (Can be overridden)

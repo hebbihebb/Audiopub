@@ -1,0 +1,10 @@
+{
+    "ae": {
+        "sample_rate": 24000,
+        "base_chunk_size": 1024
+    },
+    "ttl": {
+        "chunk_compress_factor": 4,
+        "latent_dim": 32
+    }
+}

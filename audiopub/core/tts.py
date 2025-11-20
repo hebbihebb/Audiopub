@@ -149,9 +149,16 @@ def load_onnx(
     if not os.path.exists(onnx_path):
         raise FileNotFoundError(f"Model file not found: {onnx_path}")
 
-    # LFS Check: Check if file is too small (< 10MB)
-    if os.path.getsize(onnx_path) < 10 * 1024 * 1024:
-         raise RuntimeError(f"Model file {onnx_path} is too small. It might be a Git LFS pointer. Please run 'git lfs pull'.")
+    # LFS Check: Check if file is an LFS pointer
+    try:
+        with open(onnx_path, 'rb') as f:
+            header = f.read(100)
+            if b'version https://git-lfs.github.com/spec/v1' in header:
+                 raise RuntimeError(f"Model file {onnx_path} is a Git LFS pointer. Please run 'git lfs pull'.")
+    except Exception as e:
+        if "is a Git LFS pointer" in str(e):
+            raise e
+        # Ignore other errors (e.g. permission), let onnxruntime handle it
 
     return ort.InferenceSession(onnx_path, sess_options=opts, providers=providers)
 

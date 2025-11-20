@@ -44,7 +44,8 @@ class AudioProcessor:
         with open(concat_list_path, "w", encoding='utf-8') as f:
             for ch in chapter_files:
                 # ffmpeg requires absolute paths or relative safely escaped
-                safe_path = ch['file'].replace("'", "'\\''")
+                abs_path = os.path.abspath(ch['file'])
+                safe_path = abs_path.replace("'", "'\\''")
                 f.write(f"file '{safe_path}'\n")
 
         # 2. Create FFMETADATA

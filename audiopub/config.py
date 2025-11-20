@@ -5,7 +5,7 @@ import os
 
 # Default Paths
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-ASSETS_DIR = os.path.join(BASE_DIR, "assets")
+ASSETS_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "assets")
 OUTPUT_DIR = os.path.join(BASE_DIR, "output")
 
 # Create directories if they don't exist

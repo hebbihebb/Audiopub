@@ -51,8 +51,13 @@ def check_lfs():
          return False, "No ONNX models found in assets."
 
     for f in onnx_files:
-        if os.path.getsize(f) < 10 * 1024 * 1024: # < 10MB
-            return False, f"File {os.path.basename(f)} is too small. Please run 'git lfs pull'."
+        try:
+            with open(f, 'rb') as file:
+                header = file.read(100)
+                if b'version https://git-lfs.github.com/spec/v1' in header:
+                    return False, f"File {os.path.basename(f)} is a Git LFS pointer. Please run 'git lfs pull'."
+        except:
+            pass
 
     return True, "OK"
 

@@ -4,6 +4,7 @@ from nicegui import ui, app, run
 from audiopub import config
 from audiopub.core.worker import Worker
 import glob
+import html
 
 # --- Globals ---
 worker = Worker()
@@ -73,16 +74,67 @@ def index():
         'is_processing': False
     }
 
-    log_content = ""
+    # Fonts and Styles
+    ui.add_head_html('''
+        <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;700&display=swap" rel="stylesheet">
+        <style>
+            body {
+                font-family: 'Inter', sans-serif;
+                background-color: #020617; /* slate-950 */
+                color: #e2e8f0; /* slate-200 */
+            }
+            .glass-panel {
+                background: rgba(15, 23, 42, 0.7);
+                backdrop-filter: blur(16px);
+                -webkit-backdrop-filter: blur(16px);
+                border: 1px solid rgba(148, 163, 184, 0.1);
+                box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
+            }
+            .terminal-container {
+                background-color: #0a0a0a;
+                background-image: radial-gradient(#1e293b 1px, transparent 1px);
+                background-size: 20px 20px;
+                border: 1px solid #334155;
+                box-shadow: inset 0 0 40px rgba(0,0,0,0.8);
+            }
+            .neon-text {
+                color: #22d3ee; /* cyan-400 */
+                text-shadow: 0 0 5px rgba(34, 211, 238, 0.3);
+                font-family: 'JetBrains Mono', monospace;
+            }
+            .input-dark .q-field__control {
+                background: rgba(2, 6, 23, 0.5) !important;
+            }
+        </style>
+    ''')
+
+    # Brand Colors
+    ui.colors(
+        primary='#8b5cf6',  # Violet
+        secondary='#06b6d4', # Cyan
+        accent='#d946ef',   # Fuchsia
+        dark='#020617',     # Slate-950
+        positive='#10b981', # Emerald
+        negative='#ef4444', # Red
+        info='#3b82f6',     # Blue
+        warning='#f59e0b'   # Amber
+    )
+
+    log_scroll = None
     log_element = None
     progress_bar = None
+    log_content = ""
 
+    # Callbacks
     def update_log(msg):
         nonlocal log_content
         log_content += msg + "\n"
         if log_element:
-            log_element.set_content(f"<pre>{log_content}</pre>")
-            log_element.run_method('scrollTo', 0, 999999)
+            # Escape html to be safe
+            safe_content = html.escape(log_content)
+            log_element.set_content(f"<div class='whitespace-pre-wrap'>{safe_content}</div>")
+            if log_scroll:
+                log_scroll.scroll_to(percent=1.0)
 
     def update_progress(val):
         if progress_bar:
@@ -93,82 +145,127 @@ def index():
 
     async def start_conversion():
         if not state['epub_path']:
-            ui.notify('Please select an EPUB file.', type='warning')
+            ui.notify('Please select an EPUB file.', type='warning', icon='warning')
             return
         if not state['output_dir']:
-            ui.notify('Please select an output directory.', type='warning')
+            ui.notify('Please select an output directory.', type='warning', icon='warning')
             return
         if not state['selected_voice']:
-            ui.notify('Please select a voice.', type='warning')
+            ui.notify('Please select a voice.', type='warning', icon='warning')
             return
 
         state['is_processing'] = True
         progress_bar.set_value(0)
-        update_log("--- Starting Conversion ---\n")
+        update_log("\n--- Starting Conversion ---\n")
 
         await worker.run_conversion(state['epub_path'], state['output_dir'], state['selected_voice'])
 
         state['is_processing'] = False
-        ui.notify('Process finished (check logs).')
+        ui.notify('Process finished.', type='positive', icon='check')
 
     def stop_conversion():
         worker.stop()
         update_log("\n[Stopping requested...]\n")
 
-    # Layout
-    with ui.row().classes('w-full h-screen no-wrap'):
+    # --- Layout Construction ---
 
-        # Left Panel (Controls)
-        with ui.column().classes('w-1/3 p-4 bg-gray-100 h-full gap-4'):
-            ui.label('Audiopub').classes('text-2xl font-bold mb-4')
+    # Main container
+    with ui.element('div').classes('w-full h-screen flex flex-row overflow-hidden bg-slate-950'):
+
+        # Left: Floating Glass Card (Controls)
+        with ui.column().classes('w-96 m-6 p-6 rounded-3xl glass-panel z-10 flex flex-col gap-6 shrink-0 transition-all duration-300 hover:shadow-violet-900/20'):
+
+            # Header
+            with ui.row().classes('items-center gap-2 mb-2'):
+                 ui.icon('graphic_eq', size='md', color='secondary').classes('animate-pulse')
+                 ui.label('AUDIOPUB').classes('text-2xl font-bold tracking-wider bg-clip-text text-transparent bg-gradient-to-r from-violet-400 to-cyan-400')
 
             # LFS Check
             lfs_ok, lfs_msg = check_lfs()
             if not lfs_ok:
-                ui.label('LFS Error:').classes('text-red-500 font-bold')
-                ui.label(lfs_msg).classes('text-red-500 text-sm')
+                with ui.row().classes('w-full bg-red-900/30 border border-red-500/50 p-3 rounded-lg items-center gap-2'):
+                    ui.icon('error', color='negative')
+                    ui.label(lfs_msg).classes('text-red-200 text-xs leading-tight flex-grow')
 
-            # File Inputs
-            ui.label('EPUB File:')
-            with ui.row().classes('w-full items-center'):
-                ui.input(value=state['epub_path']).bind_value(state, 'epub_path').classes('flex-grow')
-                # File picker button not native simple, using simple input for now or nicegui native file picker
-                # We'll use a simple notify to type path for now, or a dialog?
-                # NiceGUI has ui.upload but for local app we can use native file dialog if possible,
-                # but web-based UI usually requires upload.
-                # Since this is a "desktop app" (presumably running locally), we can just type path or implement a picker.
-                # I'll stick to text input for simplicity in "desktop" mode unless requested.
+            # Inputs
+            with ui.column().classes('w-full gap-4'):
 
-            ui.label('Output Directory:')
-            ui.input(value=state['output_dir']).bind_value(state, 'output_dir').classes('w-full')
+                # EPUB
+                with ui.column().classes('w-full gap-1'):
+                    ui.label('SOURCE FILE').classes('text-xs font-bold text-slate-500 tracking-widest')
+                    epub_input = ui.input(value=state['epub_path'], placeholder='/path/to/book.epub') \
+                        .bind_value(state, 'epub_path') \
+                        .props('outlined rounded dense dark color="secondary" bg-color="transparent"') \
+                        .classes('w-full input-dark font-mono text-sm')
+                    with epub_input.add_slot('prepend'):
+                        ui.icon('book', color='slate-400')
 
-            # Voice Selector
-            ui.label('Voice:')
-            voices = get_voices()
-            # map full path to basename for display
-            voice_options = {v: os.path.basename(v) for v in voices}
-            ui.select(options=voice_options, value=state['selected_voice']).bind_value(state, 'selected_voice').classes('w-full')
+                # OUTPUT
+                with ui.column().classes('w-full gap-1'):
+                    ui.label('OUTPUT DESTINATION').classes('text-xs font-bold text-slate-500 tracking-widest')
+                    out_input = ui.input(value=state['output_dir'], placeholder='/output/path') \
+                        .bind_value(state, 'output_dir') \
+                        .props('outlined rounded dense dark color="secondary" bg-color="transparent"') \
+                        .classes('w-full input-dark font-mono text-sm')
+                    with out_input.add_slot('prepend'):
+                        ui.icon('folder', color='slate-400')
 
-            ui.separator()
+                # VOICE
+                with ui.column().classes('w-full gap-1'):
+                    ui.label('NEURAL VOICE').classes('text-xs font-bold text-slate-500 tracking-widest')
+                    voices = get_voices()
+                    # map full path to basename for display, beautified
+                    voice_options = {v: os.path.basename(v).replace('.json', '').replace('_', ' ').title() for v in voices}
 
-            # Buttons
-            with ui.row().classes('w-full gap-2'):
-                ui.button('Start Conversion', on_click=start_conversion)\
-                    .bind_enabled_from(state, 'is_processing', backward=lambda x: not x)\
-                    .classes('flex-grow bg-blue-600 text-white')
+                    voice_select = ui.select(options=voice_options, value=state['selected_voice']) \
+                        .bind_value(state, 'selected_voice') \
+                        .props('outlined rounded dense dark color="secondary" behavior="menu" options-dense popup-content-class="bg-slate-900 text-slate-200 border border-slate-700"') \
+                        .classes('w-full font-medium')
+                    with voice_select.add_slot('prepend'):
+                         ui.icon('record_voice_over', color='slate-400')
 
-                ui.button('Stop', on_click=stop_conversion)\
-                    .bind_enabled_from(state, 'is_processing')\
-                    .classes('bg-red-500 text-white')
+            ui.separator().classes('bg-slate-700/50')
 
-            # Progress
-            progress_bar = ui.linear_progress(value=0).classes('w-full mt-4')
+            # Actions
+            with ui.column().classes('w-full gap-3 mt-auto'):
 
-        # Right Panel (Logs)
-        with ui.column().classes('w-2/3 p-4 h-full bg-black text-white'):
-            ui.label('Logs').classes('text-xl font-bold mb-2')
-            # Scrollable log area
-            with ui.scroll_area().classes('w-full h-full border border-gray-700 p-2 rounded'):
-                log_element = ui.html('<pre></pre>', sanitize=False).classes('font-mono text-sm')
+                # Progress Bar
+                ui.label('STATUS').classes('text-xs font-bold text-slate-500 tracking-widest')
+                progress_bar = ui.linear_progress(value=0, show_value=False) \
+                    .props('track-color="slate-800" color="secondary" size="6px" rounded') \
+                    .classes('w-full shadow-lg shadow-cyan-900/50')
+
+                with ui.row().classes('w-full gap-3 pt-2'):
+                    # Start Button
+                    ui.button('GENERATE AUDIO', on_click=start_conversion) \
+                        .bind_enabled_from(state, 'is_processing', backward=lambda x: not x) \
+                        .props('unelevated no-caps') \
+                        .classes('flex-grow bg-gradient-to-r from-violet-600 to-cyan-600 hover:from-violet-500 hover:to-cyan-500 text-white font-bold rounded-xl shadow-lg shadow-violet-900/20 transition-all py-3')
+
+                    # Stop Button
+                    ui.button(icon='stop', on_click=stop_conversion) \
+                        .bind_enabled_from(state, 'is_processing') \
+                        .props('unelevated round dense color="negative"') \
+                        .classes('shadow-lg shadow-red-900/20 opacity-80 hover:opacity-100')
+
+        # Right: Terminal (Logs)
+        with ui.column().classes('flex-grow m-6 ml-0 rounded-3xl terminal-container overflow-hidden relative flex flex-col shadow-2xl'):
+            # Terminal Header
+            with ui.row().classes('w-full bg-slate-900/80 border-b border-slate-800 p-3 items-center gap-2 px-4'):
+                with ui.row().classes('gap-1.5'):
+                    ui.element('div').classes('w-3 h-3 rounded-full bg-red-500/80')
+                    ui.element('div').classes('w-3 h-3 rounded-full bg-yellow-500/80')
+                    ui.element('div').classes('w-3 h-3 rounded-full bg-green-500/80')
+                ui.label('system_log.sh').classes('text-xs font-mono text-slate-500 ml-2')
+                ui.space()
+                ui.label('v1.0.0').classes('text-xs font-mono text-slate-600')
+
+            # Log Content
+            log_scroll = ui.scroll_area().classes('w-full flex-grow p-6 font-mono text-sm')
+            with log_scroll:
+                log_element = ui.html('', sanitize=False).classes('neon-text text-sm leading-relaxed whitespace-pre-wrap')
+                # Init with welcome message
+                update_log("> System initialized.")
+                update_log("> Ready to process.")
 
 ui.run(title='Audiopub', reload=False)

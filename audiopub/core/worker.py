@@ -3,6 +3,8 @@ import logging
 import os
 import shutil
 import time
+import secrets
+import hashlib
 from typing import Callable, Optional
 import traceback
 
@@ -36,8 +38,16 @@ class Worker:
         self.log(f"Starting conversion for {os.path.basename(epub_path)}")
 
         book_name = os.path.splitext(os.path.basename(epub_path))[0]
-        temp_dir = os.path.join(output_dir, "temp_work", book_name)
+        temp_dir_base = os.path.join(output_dir, "temp_work")
+        os.makedirs(temp_dir_base, exist_ok=True)
+
+        voice_id = os.path.splitext(os.path.basename(voice_path))[0]
+        entropy = f"{book_name}|{voice_id}|{time.time()}|{secrets.token_hex(4)}"
+        generation_id = hashlib.sha1(entropy.encode()).hexdigest()[:8]
+        temp_dir = os.path.join(temp_dir_base, f"{book_name}_{generation_id}")
         os.makedirs(temp_dir, exist_ok=True)
+        self.log(f"Using temp directory: {temp_dir}")
+
         final_output = os.path.join(output_dir, book_name + ".m4b")
 
         try:

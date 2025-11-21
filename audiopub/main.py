@@ -6,9 +6,16 @@ from audiopub.core.worker import Worker
 from audiopub.file_picker import LocalFilePicker
 import glob
 import html
+import secrets
+import sys
+import threading
+import time
+from fastapi.responses import FileResponse
+from fastapi import HTTPException
 
 # --- Globals ---
 worker = Worker()
+served_outputs = {}
 
 # --- Logic ---
 
@@ -63,6 +70,25 @@ def check_lfs():
 
     return True, "OK"
 
+@app.get('/media/{token}')
+def serve_output(token: str):
+    """Serve generated audio by token."""
+    path = served_outputs.get(token)
+    if not path or not os.path.exists(path):
+        raise HTTPException(status_code=404, detail="Audio not found")
+    return FileResponse(path, media_type='audio/mp4', filename=os.path.basename(path))
+
+@app.post('/restart')
+def restart_server():
+    """Restart the NiceGUI server process."""
+    def _restart():
+        time.sleep(0.3)
+        python = sys.executable
+        os.execv(python, [python, "-m", "audiopub.main"])
+
+    threading.Thread(target=_restart, daemon=True).start()
+    return {"status": "restarting"}
+
 # --- UI ---
 
 @ui.page('/')
@@ -72,11 +98,28 @@ def index():
         'epub_path': '',
         'output_dir': config.OUTPUT_DIR,
         'selected_voice': None,
-        'is_processing': False
+        'is_processing': False,
+        'last_output_token': None,
+        'last_output_path': None
     }
+    last_token_holder = {'token': None}
 
     # Fonts and Styles
     ui.add_head_html('''
+        <script>
+            (function() {
+                const reloadKey = 'audiopub_autoscale_reload';
+                if (!sessionStorage.getItem(reloadKey)) {
+                    sessionStorage.setItem(reloadKey, '1');
+                    // One-time reload to fix initial layout scaling
+                    window.addEventListener('load', () => setTimeout(() => location.reload(), 50));
+                } else {
+                    sessionStorage.removeItem(reloadKey);
+                    // Trigger a resize to settle layout on the final load
+                    window.addEventListener('load', () => window.dispatchEvent(new Event('resize')));
+                }
+            })();
+        </script>
         <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;700&display=swap" rel="stylesheet">
         <style>
             body {
@@ -124,6 +167,8 @@ def index():
     log_scroll = None
     log_element = None
     progress_bar = None
+    audio_player = None
+    player_label = None
     log_content = ""
 
     # Callbacks
@@ -171,7 +216,12 @@ def index():
         )
         picker.open()
 
+    async def trigger_restart():
+        ui.notify('Restarting server...', type='warning', icon='refresh')
+        await ui.run_javascript("fetch('/restart', {method:'POST'}).then(() => setTimeout(() => location.reload(), 1200));")
+
     async def start_conversion():
+        nonlocal audio_player, player_label
         if not state['epub_path']:
             ui.notify('Please select an EPUB file.', type='warning', icon='warning')
             return
@@ -182,6 +232,9 @@ def index():
             ui.notify('Please select a voice.', type='warning', icon='warning')
             return
 
+        book_name = os.path.splitext(os.path.basename(state['epub_path']))[0]
+        final_output = os.path.join(state['output_dir'], book_name + ".m4b")
+
         state['is_processing'] = True
         progress_bar.set_value(0)
         update_log("\n--- Starting Conversion ---\n")
@@ -190,6 +243,23 @@ def index():
 
         state['is_processing'] = False
         ui.notify('Process finished.', type='positive', icon='check')
+        if os.path.exists(final_output):
+            if last_token_holder['token']:
+                served_outputs.pop(last_token_holder['token'], None)
+            token = secrets.token_urlsafe(8)
+            served_outputs[token] = final_output
+            last_token_holder['token'] = token
+            state['last_output_token'] = token
+            state['last_output_path'] = final_output
+            source = f"/media/{token}"
+            if audio_player:
+                audio_player.set_source(source)
+            if player_label:
+                player_label.set_text(f"Ready: {os.path.basename(final_output)}")
+            update_log(f"\n--- Preview ready: {final_output} ---\n")
+            ui.notify('Preview ready. Use the player to listen.', type='positive', icon='play_arrow')
+        else:
+            ui.notify('Output file not found for playback.', type='warning', icon='warning')
 
     def stop_conversion():
         worker.stop()
@@ -260,6 +330,13 @@ def index():
                     with voice_select.add_slot('prepend'):
                          ui.icon('record_voice_over', color='slate-400')
 
+                # Playback
+                with ui.column().classes('w-full gap-1'):
+                    ui.label('PLAYBACK').classes('text-xs font-bold text-slate-500 tracking-widest')
+                    player_label = ui.label('No recent output yet').classes('text-sm text-slate-400')
+                    audio_player = ui.audio(src="").props('controls preload="metadata"') \
+                        .classes('w-full rounded-lg shadow-inner shadow-black/20')
+
             ui.separator().classes('bg-slate-700/50')
 
             # Actions
@@ -283,6 +360,10 @@ def index():
                         .bind_enabled_from(state, 'is_processing') \
                         .props('unelevated round dense color="negative"') \
                         .classes('shadow-lg shadow-red-900/20 opacity-80 hover:opacity-100')
+
+                ui.button('RESTART SERVER', on_click=trigger_restart) \
+                    .props('outline color=\"warning\" icon=\"refresh\"') \
+                    .classes('self-stretch')
 
         # Right: Terminal (Logs)
         with ui.column().classes('flex-grow m-6 ml-0 rounded-3xl terminal-container overflow-hidden relative flex flex-col shadow-2xl'):

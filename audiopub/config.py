@@ -23,7 +23,7 @@ MAX_CHUNK_SIZE = 300  # Recommended max chunk size for natural pauses
 # Audio Settings
 CROSSFADE_MS = 50
 SILENCE_PADDING_MS = 300 # Recommended silence between chunks
-CHAPTER_SILENCE_MS = 1500 # Silence between chapters (ACX recommends 1-5 seconds)
+CHAPTER_SILENCE_MS = 5000 # Silence between chapters (ACX recommends 1-5 seconds); default near 5s for clearer separation
 SAMPLE_RATE = 24000 # Supertonic default
 
 # FFMPEG Path (Can be overridden)

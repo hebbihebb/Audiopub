@@ -41,26 +41,40 @@ class AudioProcessor:
 
         combined.export(output_path, format="wav")
 
-    def create_m4b(self, chapter_files: List[dict], output_path: str, metadata: dict):
+    def create_m4b(self, chapter_files: List[dict], output_path: str, metadata: dict, chapter_silence_ms: int = None):
         """
         Muxes chapter WAVs into a single M4B (AAC) file with chapters.
         chapter_files: list of {'file': path, 'title': title}
         """
+        if chapter_silence_ms is None:
+            chapter_silence_ms = self.config.CHAPTER_SILENCE_MS
+
+        output_dir = os.path.dirname(output_path)
+
+        silence_path = None
+        if len(chapter_files) > 1 and chapter_silence_ms > 0:
+            silence_path = os.path.join(output_dir, "chapter_silence.wav")
+            AudioSegment.silent(duration=chapter_silence_ms).export(silence_path, format="wav")
+
         # 1. Concatenate all chapters into one WAV (or feed to ffmpeg via concat demuxer)
         # Using concat demuxer is better for memory than loading huge AudioSegment
 
-        concat_list_path = os.path.join(os.path.dirname(output_path), "files.txt")
+        concat_list_path = os.path.join(output_dir, "files.txt")
         with open(concat_list_path, "w", encoding='utf-8') as f:
-            for ch in chapter_files:
+            for idx, ch in enumerate(chapter_files):
                 # ffmpeg requires absolute paths or relative safely escaped
                 abs_path = os.path.abspath(ch['file'])
                 safe_path = abs_path.replace("'", "'\\''")
                 f.write(f"file '{safe_path}'\n")
+                if silence_path and idx < len(chapter_files) - 1:
+                    safe_silence = silence_path.replace("'", "'\\''")
+                    f.write(f"file '{safe_silence}'\n")
 
         # 2. Create FFMETADATA
         # We need to calculate start/end times for chapters
-        metadata_path = os.path.join(os.path.dirname(output_path), "ffmetadata.txt")
-        self._generate_ffmetadata(chapter_files, metadata_path, metadata)
+        metadata_path = os.path.join(output_dir, "ffmetadata.txt")
+        effective_silence = chapter_silence_ms if len(chapter_files) > 1 else 0
+        self._generate_ffmetadata(chapter_files, metadata_path, metadata, effective_silence)
 
         # 3. Run FFMPEG
         # ffmpeg -f concat -safe 0 -i files.txt -i ffmetadata.txt -map_metadata 1 -c:a aac -b:a 64k output.m4b
@@ -83,8 +97,10 @@ class AudioProcessor:
         # Cleanup
         os.remove(concat_list_path)
         os.remove(metadata_path)
+        if silence_path and os.path.exists(silence_path):
+            os.remove(silence_path)
 
-    def _generate_ffmetadata(self, chapter_files: List[dict], output_path: str, book_metadata: dict):
+    def _generate_ffmetadata(self, chapter_files: List[dict], output_path: str, book_metadata: dict, chapter_silence_ms: int = 0):
         """
         Calculates durations and writes FFMETADATA format.
         """
@@ -96,14 +112,16 @@ class AudioProcessor:
 
         current_time = 0
 
-        for ch in chapter_files:
+        total_chapters = len(chapter_files)
+        for idx, ch in enumerate(chapter_files):
             # Get duration of file
             # We can use soundfile or pydub
             info = sf.info(ch['file'])
             duration_ms = int(info.duration * 1000)
 
             start = current_time
-            end = current_time + duration_ms
+            gap_after = 0 if idx == total_chapters - 1 else chapter_silence_ms
+            end = current_time + duration_ms + gap_after
 
             content += "[CHAPTER]\n"
             content += "TIMEBASE=1/1000\n"

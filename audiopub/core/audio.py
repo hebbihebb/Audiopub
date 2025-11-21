@@ -52,28 +52,40 @@ class AudioProcessor:
         output_dir = os.path.dirname(output_path)
 
         silence_path = None
-        if len(chapter_files) > 1 and chapter_silence_ms > 0:
+        silence_sample_rate = None
+        if chapter_files:
+            try:
+                silence_sample_rate = sf.info(chapter_files[0]['file']).samplerate
+            except Exception:
+                silence_sample_rate = self.config.SAMPLE_RATE
+
+        if chapter_files and chapter_silence_ms > 0:
             silence_path = os.path.join(output_dir, "chapter_silence.wav")
-            AudioSegment.silent(duration=chapter_silence_ms).export(silence_path, format="wav")
+            AudioSegment.silent(
+                duration=chapter_silence_ms,
+                frame_rate=silence_sample_rate or self.config.SAMPLE_RATE
+            ).export(silence_path, format="wav")
 
         # 1. Concatenate all chapters into one WAV (or feed to ffmpeg via concat demuxer)
         # Using concat demuxer is better for memory than loading huge AudioSegment
 
         concat_list_path = os.path.join(output_dir, "files.txt")
         with open(concat_list_path, "w", encoding='utf-8') as f:
+            if silence_path:
+                safe_silence = silence_path.replace("'", "'\\''")
+                f.write(f"file '{safe_silence}'\n")  # Lead-in silence
             for idx, ch in enumerate(chapter_files):
                 # ffmpeg requires absolute paths or relative safely escaped
                 abs_path = os.path.abspath(ch['file'])
                 safe_path = abs_path.replace("'", "'\\''")
                 f.write(f"file '{safe_path}'\n")
                 if silence_path and idx < len(chapter_files) - 1:
-                    safe_silence = silence_path.replace("'", "'\\''")
                     f.write(f"file '{safe_silence}'\n")
 
         # 2. Create FFMETADATA
         # We need to calculate start/end times for chapters
         metadata_path = os.path.join(output_dir, "ffmetadata.txt")
-        effective_silence = chapter_silence_ms if len(chapter_files) > 1 else 0
+        effective_silence = chapter_silence_ms if chapter_files else 0
         self._generate_ffmetadata(chapter_files, metadata_path, metadata, effective_silence)
 
         # 3. Run FFMPEG
@@ -110,7 +122,7 @@ class AudioProcessor:
         if 'author' in book_metadata:
             content += f"artist={book_metadata['author']}\n"
 
-        current_time = 0
+        current_time = chapter_silence_ms  # lead-in silence before first chapter's audio
 
         total_chapters = len(chapter_files)
         for idx, ch in enumerate(chapter_files):
@@ -119,9 +131,10 @@ class AudioProcessor:
             info = sf.info(ch['file'])
             duration_ms = int(info.duration * 1000)
 
-            start = current_time
-            gap_after = 0 if idx == total_chapters - 1 else chapter_silence_ms
-            end = current_time + duration_ms + gap_after
+            gap_before = chapter_silence_ms
+            start = current_time - gap_before
+            end = current_time + duration_ms
+            gap_after = chapter_silence_ms if idx < total_chapters - 1 else 0
 
             content += "[CHAPTER]\n"
             content += "TIMEBASE=1/1000\n"
@@ -129,7 +142,7 @@ class AudioProcessor:
             content += f"END={end}\n"
             content += f"title={ch['title']}\n"
 
-            current_time = end
+            current_time = end + gap_after
 
         with open(output_path, "w", encoding='utf-8') as f:
             f.write(content)

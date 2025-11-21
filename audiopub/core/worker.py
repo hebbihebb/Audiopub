@@ -9,7 +9,7 @@ from typing import Callable, Optional
 import traceback
 
 from audiopub import config
-from audiopub.core.tts import TTSWrapper
+from audiopub.core.tts_factory import create_tts_engine
 from audiopub.core.epub import EpubParser
 from audiopub.core.audio import AudioProcessor
 
@@ -59,8 +59,8 @@ class Worker:
             self.log(f"Found {len(chapters)} chapters/sections.")
 
             # 2. Initialize TTS
-            self.log("Initializing TTS Model...")
-            tts = TTSWrapper(config.ASSETS_DIR)
+            self.log(f"Initializing TTS Model ({config.TTS_ENGINE})...")
+            tts = create_tts_engine(config.TTS_ENGINE, config.ASSETS_DIR)
             # We run load in a thread because it might block
             await asyncio.to_thread(tts.load)
             await asyncio.to_thread(tts.set_voice, voice_path)

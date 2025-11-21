@@ -20,35 +20,53 @@ served_outputs = {}
 # --- Logic ---
 
 def get_voices():
-    """Scans assets directory for voice style JSONs."""
-    # We look for JSON files that have 'style_ttl' and 'style_dp' keys ideally,
-    # or just list all JSONs in assets/voice_styles or root assets.
-    # Based on prompt: "User provided models" in assets/.
-    # We'll look recursively or just in root/voice_styles subfolder if it exists.
-
-    # Assuming user dumps .json styles in assets/ or assets/styles/
-    search_paths = [
-        os.path.join(config.ASSETS_DIR, "*.json"),
-        os.path.join(config.ASSETS_DIR, "**", "*.json")
-    ]
-
+    """Scans assets directory for voice files based on selected TTS engine."""
     voices = []
     seen = set()
 
-    for path in search_paths:
-        for f in glob.glob(path, recursive=True):
-            if f.endswith("tts.json") or f.endswith("unicode_indexer.json"):
-                continue # Skip config files
-            if f in seen: continue
-            seen.add(f)
+    # Determine file extension based on engine
+    if config.TTS_ENGINE.lower() in ["neutts-air", "neutts_air"]:
+        # For NeuTTS Air, look for WAV files with accompanying TXT files
+        # Scan in assets/voices/ or assets/reference_audio/
+        search_dirs = [
+            os.path.join(config.ASSETS_DIR, "voices"),
+            os.path.join(config.ASSETS_DIR, "reference_audio"),
+            config.ASSETS_DIR
+        ]
 
-            # Check if it looks like a voice style (simple check)
-            try:
-                # reading every json might be slow, maybe just name?
-                # For now, trust the user or check file size (styles are small).
+        for search_dir in search_dirs:
+            if not os.path.exists(search_dir):
+                continue
+
+            for f in glob.glob(os.path.join(search_dir, "**", "*.wav"), recursive=True):
+                if f in seen:
+                    continue
+                seen.add(f)
+
+                # Check if there's a matching .txt file
+                txt_file = f.rsplit('.', 1)[0] + '.txt'
+                if os.path.exists(txt_file):
+                    voices.append(f)
+                else:
+                    # Warn but still include (will error later if used)
+                    voices.append(f)
+    else:
+        # For Supertonic and other engines, look for JSON voice styles
+        search_paths = [
+            os.path.join(config.ASSETS_DIR, "*.json"),
+            os.path.join(config.ASSETS_DIR, "**", "*.json")
+        ]
+
+        for path in search_paths:
+            for f in glob.glob(path, recursive=True):
+                if f.endswith("tts.json") or f.endswith("unicode_indexer.json") or f.endswith("config.json"):
+                    continue # Skip config files
+                if f in seen:
+                    continue
+                seen.add(f)
+
+                # Check if it looks like a voice style
                 voices.append(f)
-            except:
-                pass
 
     return sorted(voices)
 

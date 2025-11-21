@@ -5,3 +5,8 @@ onnxruntime>=1.23.0
 soundfile>=0.13.0
 pydub>=0.25.1
 numpy>=2.0.0
+
+# Optional: NeuTTS Air dependencies (install if using neutts-air engine)
+# Uncomment the following lines or install manually:
+# git+https://github.com/neuphonic/neutts-air.git
+# Also requires system package: espeak (install with: apt-get install espeak OR brew install espeak)

@@ -1,0 +1,14 @@
+# Optional requirements for NeuTTS Air TTS engine
+# Install with: pip install -r requirements-neutts.txt
+#
+# IMPORTANT: Also requires system package 'espeak'
+# Ubuntu/Debian: sudo apt-get install espeak
+# macOS: brew install espeak
+# Windows: Download from http://espeak.sourceforge.net/
+
+# NeuTTS Air from GitHub
+git+https://github.com/neuphonic/neutts-air.git
+
+# Additional dependencies (if not already installed)
+torch>=2.0.0
+transformers>=4.30.0

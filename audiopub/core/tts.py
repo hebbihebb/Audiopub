@@ -9,6 +9,8 @@ import numpy as np
 import onnxruntime as ort
 import soundfile as sf
 
+from .tts_base import TTSEngine
+
 # --- Core Classes from helper.py ---
 
 class UnicodeProcessor:
@@ -227,9 +229,11 @@ def load_voice_style(voice_style_path: str) -> Style:
 
 # --- Interface for Audiopub ---
 
-class TTSWrapper:
+class TTSWrapper(TTSEngine):
+    """Supertonic TTS Engine Implementation"""
+
     def __init__(self, assets_dir: str, use_gpu: bool = False):
-        self.assets_dir = assets_dir
+        super().__init__(assets_dir, use_gpu)
         self.onnx_dir = os.path.join(assets_dir, "onnx") # Assuming 'onnx' subdir in assets, or assets itself
         if not os.path.exists(os.path.join(self.onnx_dir, "tts.json")):
             # If not in assets/onnx, check assets/
@@ -240,9 +244,7 @@ class TTSWrapper:
                  pass
 
         self.model = None
-        self.current_voice_path = None
         self.current_style = None
-        self.use_gpu = use_gpu
 
     def load(self):
         print(f"Loading TTS model from {self.onnx_dir}...")
@@ -283,3 +285,19 @@ class TTSWrapper:
         wav_data = wav_data[:valid_length]
 
         return wav_data, self.model.sample_rate
+
+    def get_sample_rate(self) -> int:
+        """Get the output sample rate of this engine"""
+        if self.model:
+            return self.model.sample_rate
+        return 24000  # Default for Supertonic
+
+    @property
+    def engine_name(self) -> str:
+        """Return the name of this TTS engine"""
+        return "supertonic"
+
+    @property
+    def voice_file_extension(self) -> str:
+        """Return the expected voice file extension"""
+        return ".json"

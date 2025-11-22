@@ -15,7 +15,7 @@ os.makedirs(OUTPUT_DIR, exist_ok=True)
 # TTS Settings
 TTS_ENGINE = os.getenv("AUDIOPUB_TTS_ENGINE", "supertonic")  # Options: "supertonic", "neutts-air"
 DEFAULT_SPEED = 1.05 # Recommended default (Range: 0.75 - 1.1)
-DEFAULT_STEPS = 16 # Higher for better quality (Range: 2 - 16)
+DEFAULT_STEPS = 16 # Higher for better quality (Range: 2 - 128; 2-16 recommended for speed)
 
 # Text Processing
 MIN_CHUNK_SIZE = 1    # Minimum characters per chunk

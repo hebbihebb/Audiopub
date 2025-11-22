@@ -118,7 +118,9 @@ def index():
         'selected_voice': None,
         'is_processing': False,
         'last_output_token': None,
-        'last_output_path': None
+        'last_output_path': None,
+        'use_gpu': False,
+        'inference_steps': config.DEFAULT_STEPS
     }
     last_token_holder = {'token': None}
 
@@ -256,8 +258,16 @@ def index():
         state['is_processing'] = True
         progress_bar.set_value(0)
         update_log("\n--- Starting Conversion ---\n")
+        update_log(f"GPU Acceleration: {'Enabled' if state['use_gpu'] else 'Disabled'}")
+        update_log(f"Inference Steps: {state['inference_steps']}")
 
-        await worker.run_conversion(state['epub_path'], state['output_dir'], state['selected_voice'])
+        await worker.run_conversion(
+            state['epub_path'],
+            state['output_dir'],
+            state['selected_voice'],
+            use_gpu=state['use_gpu'],
+            steps=state['inference_steps']
+        )
 
         state['is_processing'] = False
         ui.notify('Process finished.', type='positive', icon='check')
@@ -347,6 +357,28 @@ def index():
                         .classes('w-full font-medium')
                     with voice_select.add_slot('prepend'):
                          ui.icon('record_voice_over', color='slate-400')
+
+                # GPU ACCELERATION
+                with ui.column().classes('w-full gap-1'):
+                    ui.label('GPU ACCELERATION').classes('text-xs font-bold text-slate-500 tracking-widest')
+                    with ui.row().classes('w-full items-center gap-3'):
+                        ui.switch(value=state['use_gpu']) \
+                            .bind_value(state, 'use_gpu') \
+                            .props('color="secondary"') \
+                            .classes('text-slate-300')
+                        ui.label('Enable GPU (CUDA)').classes('text-sm text-slate-300')
+                        ui.icon('memory', color='slate-400').classes('ml-auto')
+
+                # INFERENCE STEPS
+                with ui.column().classes('w-full gap-1'):
+                    ui.label('INFERENCE STEPS').classes('text-xs font-bold text-slate-500 tracking-widest')
+                    with ui.row().classes('w-full items-center gap-2'):
+                        ui.label('Quality:').classes('text-sm text-slate-400')
+                        ui.slider(min=2, max=128, step=1, value=state['inference_steps']) \
+                            .bind_value(state, 'inference_steps') \
+                            .props('color="secondary" label-always') \
+                            .classes('flex-grow')
+                    ui.label('Lower = faster, Higher = better quality (2-16 recommended)').classes('text-xs text-slate-500 italic')
 
                 # Playback
                 with ui.column().classes('w-full gap-1'):

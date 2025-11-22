@@ -29,10 +29,20 @@ class Worker:
         if self.progress_callback:
             self.progress_callback(value)
 
-    async def run_conversion(self, epub_path: str, output_dir: str, voice_path: str):
+    async def run_conversion(self, epub_path: str, output_dir: str, voice_path: str,
+                            use_gpu: bool = False, steps: int = None):
         """
         Main orchestration logic.
+
+        Args:
+            epub_path: Path to the EPUB file
+            output_dir: Directory for output files
+            voice_path: Path to the voice file
+            use_gpu: Enable GPU acceleration (CUDA)
+            steps: Number of inference steps (None uses config default)
         """
+        if steps is None:
+            steps = config.DEFAULT_STEPS
         self.running = True
         self.cancel_event.clear()
         self.log(f"Starting conversion for {os.path.basename(epub_path)}")
@@ -60,7 +70,9 @@ class Worker:
 
             # 2. Initialize TTS
             self.log(f"Initializing TTS Model ({config.TTS_ENGINE})...")
-            tts = create_tts_engine(config.TTS_ENGINE, config.ASSETS_DIR)
+            self.log(f"GPU Acceleration: {'Enabled' if use_gpu else 'Disabled'}")
+            self.log(f"Inference Steps: {steps}")
+            tts = create_tts_engine(config.TTS_ENGINE, config.ASSETS_DIR, use_gpu=use_gpu)
             # We run load in a thread because it might block
             await asyncio.to_thread(tts.load)
             await asyncio.to_thread(tts.set_voice, voice_path)
@@ -113,9 +125,9 @@ class Worker:
 
                     self.log(f"  Synthesizing chunk {j+1}/{len(chunks)}...")
 
-                    # Synthesize (CPU heavy, run in thread)
+                    # Synthesize (CPU/GPU heavy, run in thread)
                     try:
-                        wav_data, sr = await asyncio.to_thread(tts.synthesize, chunk)
+                        wav_data, sr = await asyncio.to_thread(tts.synthesize, chunk, speed=config.DEFAULT_SPEED, steps=steps)
                         await asyncio.to_thread(audio_processor.save_chunk, wav_data, sr, chunk_path)
                         chunk_files.append(chunk_path)
                     except Exception as e:

@@ -65,6 +65,8 @@ class AudioProcessor:
                 duration=chapter_silence_ms,
                 frame_rate=silence_sample_rate or self.config.SAMPLE_RATE
             ).export(silence_path, format="wav")
+            # Use absolute path so ffmpeg concat resolves correctly
+            silence_path = os.path.abspath(silence_path)
 
         # 1. Concatenate all chapters into one WAV (or feed to ffmpeg via concat demuxer)
         # Using concat demuxer is better for memory than loading huge AudioSegment

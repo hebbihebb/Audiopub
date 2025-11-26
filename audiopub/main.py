@@ -15,6 +15,13 @@ from audiopub import config
 from audiopub.core.worker import Worker
 from audiopub.file_picker import LocalFilePicker
 
+# Setup GPU acceleration if available (silent - only for startup)
+try:
+    from setup_gpu_env import setup_gpu
+    setup_gpu(verbose=False)
+except ImportError:
+    pass  # setup_gpu_env not available, continue without GPU setup
+
 # --- Globals ---
 worker = Worker()
 served_outputs = {}
@@ -132,8 +139,8 @@ def index():
         "is_processing": False,
         "last_output_token": None,
         "last_output_path": None,
-        "use_gpu": False,
-        "inference_steps": config.DEFAULT_STEPS,
+        "use_gpu": config.DEFAULT_USE_GPU,
+        "inference_steps": config.DEFAULT_GPU_QUALITY_STEPS,
     }
     last_token_holder = {"token": None}
 
